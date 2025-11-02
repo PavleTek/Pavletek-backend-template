@@ -8,13 +8,17 @@ datasource db {
 }
 
 model User {
-  id                Int      @id @default(autoincrement())
-  email             String   @unique
-  username          String   @unique
-  hashedPassword       String
+  id                Int       @id @default(autoincrement())
+  email             String    @unique
+  username          String    @unique
+  hashedPassword    String
   name              String?
   lastName          String?
   chileanRutNumber  String?
+  color             String    @default("#3285a8")
+  createdAt         DateTime  @default(now())
+  createdBy         Int       @default(0)
+  lastLogin         DateTime?
   userRoles         UserRole[]
 }
 

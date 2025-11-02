@@ -38,6 +38,10 @@ const authenticateToken = async (req, res, next) => {
       name: user.name,
       lastName: user.lastName,
       chileanRutNumber: user.chileanRutNumber,
+      color: user.color,
+      lastLogin: user.lastLogin,
+      createdAt: user.createdAt,
+      createdBy: user.createdBy,
       roles: user.userRoles.map((ur) => ur.role.name)
     };
 
@@ -83,6 +87,10 @@ const optionalAuth = async (req, res, next) => {
         name: user.name,
         lastName: user.lastName,
         chileanRutNumber: user.chileanRutNumber,
+        color: user.color,
+        lastLogin: user.lastLogin,
+        createdAt: user.createdAt,
+        createdBy: user.createdBy,
         roles: user.userRoles.map((ur) => ur.role.name)
       };
       req.user = userWithoutPassword;

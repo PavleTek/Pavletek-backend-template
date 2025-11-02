@@ -21,6 +21,10 @@ const getAllUsers = async (req, res) => {
       name: user.name,
       lastName: user.lastName,
       chileanRutNumber: user.chileanRutNumber,
+      color: user.color,
+      lastLogin: user.lastLogin,
+      createdAt: user.createdAt,
+      createdBy: user.createdBy,
       roles: user.userRoles.map((ur) => ur.role.name)
     }));
 
@@ -68,6 +72,10 @@ const getUserById = async (req, res) => {
       name: user.name,
       lastName: user.lastName,
       chileanRutNumber: user.chileanRutNumber,
+      color: user.color,
+      lastLogin: user.lastLogin,
+      createdAt: user.createdAt,
+      createdBy: user.createdBy,
       roles: user.userRoles.map((ur) => ur.role.name)
     };
 
@@ -116,6 +124,7 @@ const createUser = async (req, res) => {
         name,
         lastName,
         chileanRutNumber,
+        createdBy: req.user?.id || 0,
         userRoles: roleIds ? {
           create: roleIds.map((roleId) => ({
             roleId
@@ -138,6 +147,10 @@ const createUser = async (req, res) => {
       name: user.name,
       lastName: user.lastName,
       chileanRutNumber: user.chileanRutNumber,
+      color: user.color,
+      lastLogin: user.lastLogin,
+      createdAt: user.createdAt,
+      createdBy: user.createdBy,
       roles: user.userRoles.map((ur) => ur.role.name)
     };
 
@@ -156,7 +169,7 @@ const updateUser = async (req, res) => {
   try {
     const { id } = req.params;
     const userId = parseInt(id);
-    const { username, email, name, lastName, chileanRutNumber } = req.body;
+    const { username, email, name, lastName, chileanRutNumber, color } = req.body;
 
     if (isNaN(userId)) {
       res.status(400).json({ error: 'Invalid user ID' });
@@ -202,7 +215,8 @@ const updateUser = async (req, res) => {
         ...(email && { email }),
         ...(name !== undefined && { name }),
         ...(lastName !== undefined && { lastName }),
-        ...(chileanRutNumber !== undefined && { chileanRutNumber })
+        ...(chileanRutNumber !== undefined && { chileanRutNumber }),
+        ...(color !== undefined && { color })
       },
       include: {
         userRoles: {

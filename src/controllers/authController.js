@@ -41,6 +41,13 @@ const login = async (req, res) => {
       return;
     }
 
+    // Update lastLogin timestamp
+    const now = new Date();
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { lastLogin: now }
+    });
+
     // Prepare user data without password
     const userWithoutPassword = {
       id: user.id,
@@ -49,6 +56,10 @@ const login = async (req, res) => {
       name: user.name,
       lastName: user.lastName,
       chileanRutNumber: user.chileanRutNumber,
+      color: user.color,
+      lastLogin: now.toISOString(), // Use the updated timestamp
+      createdAt: user.createdAt,
+      createdBy: user.createdBy,
       roles: user.userRoles.map((ur) => ur.role.name)
     };
 
