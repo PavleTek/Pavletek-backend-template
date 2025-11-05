@@ -4,6 +4,7 @@ const dotenv = require("dotenv");
 const cors = require("cors");
 const authRouter = require("./routers/authRouter");
 const adminRouter = require("./routers/adminRouter");
+const emailRouter = require("./routers/emailRouter");
 
 dotenv.config();
 
@@ -22,6 +23,7 @@ app.use(express.json());
 // Routes
 app.use("/api/auth", authRouter);
 app.use("/api/admin", adminRouter);
+app.use("/api/admin", emailRouter);
 
 app.listen(PORT, () => {
   console.log(PORT);

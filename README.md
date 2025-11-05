@@ -32,4 +32,21 @@ npm run dev
 - `JWT_SECRET`: Secret key for JWT token signing
 - `JWT_EXPIRES_IN`: JWT token expiration time (default: 7d)
 - `PORT`: Server port (default: 3001)
+- `CORS_ORIGIN`: CORS origin URL (default: http://localhost:5173)
+
+### Email Configuration
+
+#### Gmail
+- `GMAIL_CLIENT_ID`: Gmail OAuth2 client ID (optional, for OAuth2)
+- `GMAIL_CLIENT_SECRET`: Gmail OAuth2 client secret (optional, for OAuth2)
+- `GMAIL_REFRESH_TOKEN`: Gmail OAuth2 refresh token (optional, for OAuth2)
+- `GMAIL_APP_PASSWORD`: Gmail app password (alternative to OAuth2)
+
+#### Outlook
+- `OUTLOOK_CLIENT_ID`: Outlook OAuth2 client ID (optional, for OAuth2)
+- `OUTLOOK_CLIENT_SECRET`: Outlook OAuth2 client secret (optional, for OAuth2)
+- `OUTLOOK_REFRESH_TOKEN`: Outlook OAuth2 refresh token (optional, for OAuth2)
+- `OUTLOOK_APP_PASSWORD`: Outlook app password (recommended)
+
+**Note**: For Gmail, you can use either OAuth2 credentials or an App Password. For Outlook, App Password is recommended. Make sure to add email senders through the App Settings page in the frontend before sending emails.
 
