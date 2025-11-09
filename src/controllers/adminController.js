@@ -398,6 +398,48 @@ const changeUserRoles = async (req, res) => {
   }
 };
 
+// Force reset user's 2FA (admin only)
+const forceResetUser2FA = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const userId = parseInt(id);
+
+    if (isNaN(userId)) {
+      res.status(400).json({ error: 'Invalid user ID' });
+      return;
+    }
+
+    // Check if user exists
+    const user = await prisma.user.findUnique({
+      where: { id: userId }
+    });
+
+    if (!user) {
+      res.status(404).json({ error: 'User not found' });
+      return;
+    }
+
+    // Clear all 2FA-related data
+    await prisma.user.update({
+      where: { id: userId },
+      data: {
+        twoFactorSecret: null,
+        twoFactorEnabled: false,
+        twoFactorBackupCodes: [],
+        twoFactorRecoveryCode: null,
+        twoFactorRecoveryCodeExpires: null
+      }
+    });
+
+    res.status(200).json({
+      message: '2FA has been reset for this user. They will need to set up 2FA again on their next login if system 2FA is enabled.'
+    });
+  } catch (error) {
+    console.error('Force reset 2FA error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
 // Delete user
 const deleteUser = async (req, res) => {
   try {
@@ -652,6 +694,7 @@ module.exports = {
   updateUser,
   changeUserPassword,
   changeUserRoles,
+  forceResetUser2FA,
   deleteUser,
   getAllRoles,
   createRole,

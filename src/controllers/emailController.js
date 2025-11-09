@@ -318,13 +318,36 @@ const deleteEmail = async (req, res) => {
     // Check if any email senders remain
     const remainingEmailSenders = await prisma.emailSender.count();
 
-    // If no email senders remain and 2FA is enabled, auto-disable it
+    // Get configuration
+    const config = await prisma.configuration.findFirst();
+
     if (remainingEmailSenders === 0) {
-      const config = await prisma.configuration.findFirst();
+      // If no email senders remain and 2FA is enabled, auto-disable it
       if (config && config.twoFactorEnabled) {
         await prisma.configuration.update({
           where: { id: config.id },
-          data: { twoFactorEnabled: false }
+          data: { 
+            twoFactorEnabled: false,
+            recoveryEmailSenderId: null
+          }
+        });
+      } else if (config) {
+        // Clear recovery email even if 2FA is disabled
+        await prisma.configuration.update({
+          where: { id: config.id },
+          data: { recoveryEmailSenderId: null }
+        });
+      }
+    } else {
+      // If deleted email was the recovery email, clear it and disable 2FA
+      // Users will keep their 2FA setup but won't be required to use it until 2FA is re-enabled
+      if (config && config.recoveryEmailSenderId === emailId) {
+        await prisma.configuration.update({
+          where: { id: config.id },
+          data: { 
+            recoveryEmailSenderId: null,
+            twoFactorEnabled: false
+          }
         });
       }
     }

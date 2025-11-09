@@ -6,6 +6,7 @@ const {
   updateUser, 
   changeUserPassword, 
   changeUserRoles, 
+  forceResetUser2FA,
   deleteUser,
   getAllRoles,
   createRole,
@@ -28,6 +29,7 @@ router.post('/users', createUser);
 router.put('/users/:id', updateUser);
 router.put('/users/:id/password', changeUserPassword);
 router.put('/users/:id/roles', changeUserRoles);
+router.post('/users/:id/reset-2fa', forceResetUser2FA);
 router.delete('/users/:id', deleteUser);
 
 // Role management routes

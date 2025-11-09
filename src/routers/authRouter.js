@@ -10,7 +10,11 @@ const {
   verifyTwoFactorSetup,
   verifyTwoFactorSetupMandatory,
   disableTwoFactor,
-  getTwoFactorStatus
+  getTwoFactorStatus,
+  requestRecoveryCode,
+  verifyRecoveryCode,
+  requestPasswordReset,
+  verifyPasswordReset
 } = require('../controllers/authController');
 const { authenticateToken } = require('../middleware/authentication');
 
@@ -21,6 +25,10 @@ router.post('/login', login);
 router.post('/2fa/verify', verifyTwoFactor);
 router.post('/2fa/setup-mandatory', setupTwoFactorMandatory);
 router.post('/2fa/verify-setup-mandatory', verifyTwoFactorSetupMandatory);
+router.post('/2fa/recovery/request', requestRecoveryCode);
+router.post('/2fa/recovery/verify', verifyRecoveryCode);
+router.post('/password-reset/request', requestPasswordReset);
+router.post('/password-reset/verify', verifyPasswordReset);
 
 // Protected routes - users can only update their own profile
 router.get('/profile', authenticateToken, getProfile);

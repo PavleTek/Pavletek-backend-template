@@ -7,11 +7,32 @@ const getConfig = async (req, res) => {
     let config = await prisma.configuration.findFirst();
 
     if (!config) {
+      // Get first email sender for default recovery email
+      const firstEmailSender = await prisma.emailSender.findFirst({
+        orderBy: { createdAt: 'asc' }
+      });
+
       // Create default configuration if it doesn't exist
       config = await prisma.configuration.create({
         data: {
           twoFactorEnabled: false,
-          appName: 'Application'
+          appName: 'Application',
+          recoveryEmailSenderId: firstEmailSender?.id || null
+        }
+      });
+    }
+
+    // Note: Recovery email is not auto-set here. It will be set when 2FA is enabled if not already set.
+
+    // Get recovery email sender details if set
+    let recoveryEmailSender = null;
+    if (config.recoveryEmailSenderId) {
+      recoveryEmailSender = await prisma.emailSender.findUnique({
+        where: { id: config.recoveryEmailSenderId },
+        select: {
+          id: true,
+          email: true,
+          aliases: true
         }
       });
     }
@@ -22,6 +43,8 @@ const getConfig = async (req, res) => {
         id: config.id,
         twoFactorEnabled: config.twoFactorEnabled,
         appName: config.appName || 'Application',
+        recoveryEmailSenderId: config.recoveryEmailSenderId,
+        recoveryEmailSender: recoveryEmailSender,
         updatedAt: config.updatedAt
       }
     });
@@ -36,7 +59,7 @@ const getConfig = async (req, res) => {
 // are NEVER modified when system 2FA is toggled. Users keep their 2FA configuration.
 const updateConfig = async (req, res) => {
   try {
-    const { twoFactorEnabled, appName } = req.body;
+    const { twoFactorEnabled, appName, recoveryEmailSenderId } = req.body;
 
     // Validate twoFactorEnabled if provided
     if (twoFactorEnabled !== undefined && typeof twoFactorEnabled !== 'boolean') {
@@ -53,6 +76,26 @@ const updateConfig = async (req, res) => {
       if (appName.length > 100) {
         res.status(400).json({ error: 'appName must be 100 characters or less' });
         return;
+      }
+    }
+
+    // Validate recoveryEmailSenderId if provided
+    if (recoveryEmailSenderId !== undefined) {
+      if (recoveryEmailSenderId !== null && (typeof recoveryEmailSenderId !== 'number' || isNaN(recoveryEmailSenderId))) {
+        res.status(400).json({ error: 'recoveryEmailSenderId must be a number or null' });
+        return;
+      }
+
+      // If setting a recovery email, verify it exists
+      if (recoveryEmailSenderId !== null) {
+        const emailSender = await prisma.emailSender.findUnique({
+          where: { id: recoveryEmailSenderId }
+        });
+
+        if (!emailSender) {
+          res.status(404).json({ error: 'Recovery email sender not found' });
+          return;
+        }
       }
     }
 
@@ -78,12 +121,37 @@ const updateConfig = async (req, res) => {
     if (appName !== undefined) {
       updateData.appName = appName.trim();
     }
+    if (recoveryEmailSenderId !== undefined) {
+      updateData.recoveryEmailSenderId = recoveryEmailSenderId;
+    }
+
+    // If enabling 2FA and recovery email is not set, auto-set it to first available email
+    if (twoFactorEnabled === true && recoveryEmailSenderId === undefined) {
+      const currentConfig = config || await prisma.configuration.findFirst();
+      if (!currentConfig || !currentConfig.recoveryEmailSenderId) {
+        const firstEmailSender = await prisma.emailSender.findFirst({
+          orderBy: { createdAt: 'asc' }
+        });
+        if (firstEmailSender) {
+          updateData.recoveryEmailSenderId = firstEmailSender.id;
+        }
+      }
+    }
 
     if (!config) {
+      // Get first email sender for default recovery email if not specified
+      if (updateData.recoveryEmailSenderId === undefined) {
+        const firstEmailSender = await prisma.emailSender.findFirst({
+          orderBy: { createdAt: 'asc' }
+        });
+        updateData.recoveryEmailSenderId = firstEmailSender?.id || null;
+      }
+
       config = await prisma.configuration.create({
         data: {
           twoFactorEnabled: twoFactorEnabled !== undefined ? twoFactorEnabled : false,
-          appName: appName !== undefined ? appName.trim() : 'Application'
+          appName: appName !== undefined ? appName.trim() : 'Application',
+          recoveryEmailSenderId: updateData.recoveryEmailSenderId
         }
       });
     } else {
@@ -93,12 +161,27 @@ const updateConfig = async (req, res) => {
       });
     }
 
+    // Get recovery email sender details if set
+    let recoveryEmailSender = null;
+    if (config.recoveryEmailSenderId) {
+      recoveryEmailSender = await prisma.emailSender.findUnique({
+        where: { id: config.recoveryEmailSenderId },
+        select: {
+          id: true,
+          email: true,
+          aliases: true
+        }
+      });
+    }
+
     res.status(200).json({
       message: 'Configuration updated successfully',
       config: {
         id: config.id,
         twoFactorEnabled: config.twoFactorEnabled,
         appName: config.appName || 'Application',
+        recoveryEmailSenderId: config.recoveryEmailSenderId,
+        recoveryEmailSender: recoveryEmailSender,
         updatedAt: config.updatedAt
       }
     });

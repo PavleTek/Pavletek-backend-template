@@ -141,10 +141,16 @@ async function main() {
   console.log('⚙️ Creating configuration...');
   const existingConfig = await prisma.configuration.findFirst();
   if (!existingConfig) {
+    // Get first email sender if any exist for default recovery email
+    const firstEmailSender = await prisma.emailSender.findFirst({
+      orderBy: { createdAt: 'asc' }
+    });
+
     await prisma.configuration.create({
       data: {
         twoFactorEnabled: false,
-        appName: 'Application'
+        appName: 'Application',
+        recoveryEmailSenderId: firstEmailSender?.id || null
       }
     });
     console.log('✅ Configuration created with 2FA disabled');

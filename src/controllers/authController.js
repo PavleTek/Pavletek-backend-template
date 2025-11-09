@@ -1,7 +1,8 @@
 const prisma = require('../lib/prisma');
 const { comparePassword, hashPassword } = require('../utils/password');
 const { generateToken, generateTempToken, verifyToken } = require('../utils/jwt');
-const { generateSecret, generateQRCode, verifyToken: verifyTwoFactorToken, generateBackupCodes, hashBackupCode } = require('../utils/twoFactor');
+const { generateSecret, generateQRCode, verifyToken: verifyTwoFactorToken, generateBackupCodes, hashBackupCode, generateRecoveryCode, hashRecoveryCode, verifyRecoveryCode: verifyRecoveryCodeUtil } = require('../utils/twoFactor');
+const { sendEmail } = require('../services/emailService');
 
 // Login user
 const login = async (req, res) => {
@@ -672,6 +673,439 @@ const getTwoFactorStatus = async (req, res) => {
   }
 };
 
+// Request 2FA recovery code (public, uses tempToken)
+const requestRecoveryCode = async (req, res) => {
+  try {
+    const { tempToken } = req.body;
+
+    if (!tempToken) {
+      res.status(400).json({ error: 'Temporary token is required' });
+      return;
+    }
+
+    // Verify temporary token
+    let decoded;
+    try {
+      decoded = verifyToken(tempToken);
+    } catch (error) {
+      res.status(401).json({ error: 'Invalid or expired temporary token' });
+      return;
+    }
+
+    if (!decoded.isTempToken) {
+      res.status(400).json({ error: 'Invalid token type' });
+      return;
+    }
+
+    const userId = parseInt(decoded.userId);
+
+    // Get user
+    const user = await prisma.user.findUnique({
+      where: { id: userId }
+    });
+
+    if (!user) {
+      res.status(404).json({ error: 'User not found' });
+      return;
+    }
+
+    // Check if user has 2FA enabled
+    if (!user.twoFactorEnabled || !user.twoFactorSecret) {
+      res.status(400).json({ error: '2FA is not enabled for this user' });
+      return;
+    }
+
+    // Rate limiting: Check if user requested a code in the last hour
+    const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+    if (user.twoFactorRecoveryCodeExpires && user.twoFactorRecoveryCodeExpires > oneHourAgo) {
+      const minutesRemaining = Math.ceil((user.twoFactorRecoveryCodeExpires.getTime() - Date.now()) / (1000 * 60));
+      res.status(429).json({ 
+        error: `Please wait before requesting another recovery code. You can request again in ${minutesRemaining} minutes.` 
+      });
+      return;
+    }
+
+    // Get configuration for recovery email
+    const config = await prisma.configuration.findFirst();
+    if (!config || !config.recoveryEmailSenderId) {
+      res.status(500).json({ error: 'Recovery email is not configured. Please contact an administrator.' });
+      return;
+    }
+
+    // Get recovery email sender
+    const recoveryEmailSender = await prisma.emailSender.findUnique({
+      where: { id: config.recoveryEmailSenderId }
+    });
+
+    if (!recoveryEmailSender) {
+      res.status(500).json({ error: 'Recovery email sender not found. Please contact an administrator.' });
+      return;
+    }
+
+    // Generate recovery code
+    const recoveryCode = generateRecoveryCode();
+    const hashedCode = hashRecoveryCode(recoveryCode);
+
+    // Set expiration to 15 minutes from now
+    const expiresAt = new Date(Date.now() + 15 * 60 * 1000);
+
+    // Store hashed code and expiration
+    await prisma.user.update({
+      where: { id: userId },
+      data: {
+        twoFactorRecoveryCode: hashedCode,
+        twoFactorRecoveryCodeExpires: expiresAt
+      }
+    });
+
+    // Determine which email/alias to use for sending
+    // Use the main email (no alias) as default
+    const fromEmail = recoveryEmailSender.email;
+
+    // Get app name for email
+    const appName = config.appName || 'Application';
+
+    // Send recovery email
+    try {
+      await sendEmail({
+        fromEmail: fromEmail,
+        toEmails: [user.email],
+        subject: `${appName} - 2FA Recovery Code`,
+        content: `Your 2FA recovery code is: ${recoveryCode}\n\nThis code will expire in 15 minutes.\n\nIf you did not request this code, please ignore this email.`,
+        isHtml: false
+      });
+    } catch (emailError) {
+      console.error('Error sending recovery email:', emailError);
+      // Clear the recovery code if email failed
+      await prisma.user.update({
+        where: { id: userId },
+        data: {
+          twoFactorRecoveryCode: null,
+          twoFactorRecoveryCodeExpires: null
+        }
+      });
+      res.status(500).json({ error: 'Failed to send recovery email. Please try again later.' });
+      return;
+    }
+
+    res.status(200).json({
+      message: 'Recovery code sent to your email address'
+    });
+  } catch (error) {
+    console.error('Request recovery code error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+// Verify 2FA recovery code (public, uses tempToken)
+const verifyRecoveryCode = async (req, res) => {
+  try {
+    const { tempToken, code } = req.body;
+
+    if (!tempToken || !code) {
+      res.status(400).json({ error: 'Temporary token and recovery code are required' });
+      return;
+    }
+
+    // Verify temporary token
+    let decoded;
+    try {
+      decoded = verifyToken(tempToken);
+    } catch (error) {
+      res.status(401).json({ error: 'Invalid or expired temporary token' });
+      return;
+    }
+
+    if (!decoded.isTempToken) {
+      res.status(400).json({ error: 'Invalid token type' });
+      return;
+    }
+
+    const userId = parseInt(decoded.userId);
+
+    // Get user
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      include: {
+        userRoles: {
+          include: {
+            role: true
+          }
+        }
+      }
+    });
+
+    if (!user) {
+      res.status(404).json({ error: 'User not found' });
+      return;
+    }
+
+    // Check if user has 2FA enabled
+    if (!user.twoFactorEnabled || !user.twoFactorSecret) {
+      res.status(400).json({ error: '2FA is not enabled for this user' });
+      return;
+    }
+
+    // Check if recovery code exists and is not expired
+    if (!user.twoFactorRecoveryCode || !user.twoFactorRecoveryCodeExpires) {
+      res.status(400).json({ error: 'No recovery code found. Please request a new recovery code.' });
+      return;
+    }
+
+    if (new Date() > user.twoFactorRecoveryCodeExpires) {
+      res.status(400).json({ error: 'Recovery code has expired. Please request a new one.' });
+      return;
+    }
+
+    // Verify recovery code
+    const isValid = verifyRecoveryCodeUtil(code, user.twoFactorRecoveryCode);
+
+    if (!isValid) {
+      res.status(401).json({ error: 'Invalid recovery code' });
+      return;
+    }
+
+    // Disable 2FA for user and clear recovery code
+    await prisma.user.update({
+      where: { id: userId },
+      data: {
+        twoFactorSecret: null,
+        twoFactorEnabled: false,
+        twoFactorBackupCodes: [],
+        twoFactorRecoveryCode: null,
+        twoFactorRecoveryCodeExpires: null
+      }
+    });
+
+    // Update lastLogin timestamp
+    const now = new Date();
+    await prisma.user.update({
+      where: { id: userId },
+      data: { lastLogin: now }
+    });
+
+    // Prepare user data without password
+    const userWithoutPassword = {
+      id: user.id,
+      username: user.username,
+      email: user.email,
+      name: user.name,
+      lastName: user.lastName,
+      chileanRutNumber: user.chileanRutNumber,
+      color: user.color,
+      lastLogin: now.toISOString(),
+      createdAt: user.createdAt,
+      createdBy: user.createdBy,
+      roles: user.userRoles.map((ur) => ur.role.name)
+    };
+
+    // Generate full JWT token
+    const token = generateToken(userWithoutPassword);
+
+    res.status(200).json({
+      message: 'Recovery code verified successfully. 2FA has been disabled. You can set it up again from your profile.',
+      user: userWithoutPassword,
+      token
+    });
+  } catch (error) {
+    console.error('Verify recovery code error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+// Request password reset code (public)
+const requestPasswordReset = async (req, res) => {
+  try {
+    const { username } = req.body;
+
+    if (!username) {
+      res.status(400).json({ error: 'Username or email is required' });
+      return;
+    }
+
+    // Find user by username or email (case-insensitive)
+    const user = await prisma.user.findFirst({
+      where: {
+        OR: [
+          { 
+            username: {
+              equals: username,
+              mode: 'insensitive'
+            }
+          },
+          { 
+            email: {
+              equals: username,
+              mode: 'insensitive'
+            }
+          }
+        ]
+      }
+    });
+
+    // Don't reveal if user exists or not (security best practice)
+    // But we still need to check for rate limiting
+    if (user) {
+      // Rate limiting: Check if user requested a code in the last hour
+      const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+      if (user.passwordResetCodeExpires && user.passwordResetCodeExpires > oneHourAgo) {
+        const minutesRemaining = Math.ceil((user.passwordResetCodeExpires.getTime() - Date.now()) / (1000 * 60));
+        res.status(429).json({ 
+          error: `Please wait before requesting another password reset code. You can request again in ${minutesRemaining} minutes.` 
+        });
+        return;
+      }
+
+      // Get configuration for recovery email
+      const config = await prisma.configuration.findFirst();
+      if (!config || !config.recoveryEmailSenderId) {
+        res.status(500).json({ error: 'Password reset email is not configured. Please contact an administrator.' });
+        return;
+      }
+
+      // Get recovery email sender
+      const recoveryEmailSender = await prisma.emailSender.findUnique({
+        where: { id: config.recoveryEmailSenderId }
+      });
+
+      if (!recoveryEmailSender) {
+        res.status(500).json({ error: 'Password reset email sender not found. Please contact an administrator.' });
+        return;
+      }
+
+      // Generate reset code
+      const resetCode = generateRecoveryCode();
+      const hashedCode = hashRecoveryCode(resetCode);
+
+      // Set expiration to 15 minutes from now
+      const expiresAt = new Date(Date.now() + 15 * 60 * 1000);
+
+      // Store hashed code and expiration
+      await prisma.user.update({
+        where: { id: user.id },
+        data: {
+          passwordResetCode: hashedCode,
+          passwordResetCodeExpires: expiresAt
+        }
+      });
+
+      // Determine which email/alias to use for sending
+      // Use the main email (no alias) as default
+      const fromEmail = recoveryEmailSender.email;
+
+      // Get app name for email
+      const appName = config.appName || 'Application';
+
+      // Send password reset email
+      try {
+        await sendEmail({
+          fromEmail: fromEmail,
+          toEmails: [user.email],
+          subject: `${appName} - Password Reset Code`,
+          content: `Your password reset code is: ${resetCode}\n\nThis code will expire in 15 minutes.\n\nIf you did not request this code, please ignore this email and your password will remain unchanged.`,
+          isHtml: false
+        });
+      } catch (emailError) {
+        console.error('Error sending password reset email:', emailError);
+        // Clear the reset code if email failed
+        await prisma.user.update({
+          where: { id: user.id },
+          data: {
+            passwordResetCode: null,
+            passwordResetCodeExpires: null
+          }
+        });
+        res.status(500).json({ error: 'Failed to send password reset email. Please try again later.' });
+        return;
+      }
+    }
+
+    // Always return success message (don't reveal if user exists)
+    res.status(200).json({
+      message: 'If an account with that username or email exists, a password reset code has been sent.'
+    });
+  } catch (error) {
+    console.error('Request password reset error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+// Verify password reset code and reset password (public)
+const verifyPasswordReset = async (req, res) => {
+  try {
+    const { username, code, newPassword } = req.body;
+
+    if (!username || !code || !newPassword) {
+      res.status(400).json({ error: 'Username or email, code, and new password are required' });
+      return;
+    }
+
+    // Find user by username or email (case-insensitive)
+    const user = await prisma.user.findFirst({
+      where: {
+        OR: [
+          { 
+            username: {
+              equals: username,
+              mode: 'insensitive'
+            }
+          },
+          { 
+            email: {
+              equals: username,
+              mode: 'insensitive'
+            }
+          }
+        ]
+      }
+    });
+
+    if (!user) {
+      res.status(404).json({ error: 'User not found' });
+      return;
+    }
+
+    // Check if reset code exists and is not expired
+    if (!user.passwordResetCode || !user.passwordResetCodeExpires) {
+      res.status(400).json({ error: 'No password reset code found. Please request a new password reset code.' });
+      return;
+    }
+
+    if (new Date() > user.passwordResetCodeExpires) {
+      res.status(400).json({ error: 'Password reset code has expired. Please request a new one.' });
+      return;
+    }
+
+    // Verify reset code
+    const isValid = verifyRecoveryCodeUtil(code, user.passwordResetCode);
+
+    if (!isValid) {
+      res.status(401).json({ error: 'Invalid password reset code' });
+      return;
+    }
+
+    // Hash new password
+    const hashedPassword = await hashPassword(newPassword);
+
+    // Update password and clear reset code
+    await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        hashedPassword: hashedPassword,
+        passwordResetCode: null,
+        passwordResetCodeExpires: null
+      }
+    });
+
+    res.status(200).json({
+      message: 'Password has been reset successfully. You can now login with your new password.'
+    });
+  } catch (error) {
+    console.error('Verify password reset error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
 module.exports = {
   login,
   getProfile,
@@ -683,5 +1117,9 @@ module.exports = {
   verifyTwoFactorSetup,
   verifyTwoFactorSetupMandatory,
   disableTwoFactor,
-  getTwoFactorStatus
+  getTwoFactorStatus,
+  requestRecoveryCode,
+  verifyRecoveryCode,
+  requestPasswordReset,
+  verifyPasswordReset
 };

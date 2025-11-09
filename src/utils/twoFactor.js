@@ -94,12 +94,44 @@ function verifyBackupCode(code, hashedCodes) {
   return hashedCodes.includes(hashedCode);
 }
 
+/**
+ * Generate a 6-digit recovery code for 2FA reset
+ * @returns {string} 6-digit numeric code
+ */
+function generateRecoveryCode() {
+  // Generate a random 6-digit number
+  return Math.floor(100000 + Math.random() * 900000).toString();
+}
+
+/**
+ * Hash a recovery code for storage
+ * @param {string} code - Plain recovery code
+ * @returns {string} Hashed code
+ */
+function hashRecoveryCode(code) {
+  return crypto.createHash('sha256').update(code).digest('hex');
+}
+
+/**
+ * Verify a recovery code against hashed code
+ * @param {string} code - Plain recovery code to verify
+ * @param {string} hashedCode - Hashed recovery code
+ * @returns {boolean} True if code matches
+ */
+function verifyRecoveryCode(code, hashedCode) {
+  const computedHash = hashRecoveryCode(code);
+  return computedHash === hashedCode;
+}
+
 module.exports = {
   generateSecret,
   generateQRCode,
   verifyToken,
   generateBackupCodes,
   hashBackupCode,
-  verifyBackupCode
+  verifyBackupCode,
+  generateRecoveryCode,
+  hashRecoveryCode,
+  verifyRecoveryCode
 };
 
