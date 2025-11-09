@@ -409,6 +409,13 @@ const deleteUser = async (req, res) => {
       return;
     }
 
+    // Prevent users from deleting themselves
+    const currentUserId = req.user?.id;
+    if (currentUserId && userId === currentUserId) {
+      res.status(400).json({ error: 'You cannot delete your own account' });
+      return;
+    }
+
     // Check if user exists
     const user = await prisma.user.findUnique({
       where: { id: userId },
