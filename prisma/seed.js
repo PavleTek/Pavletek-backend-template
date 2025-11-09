@@ -137,10 +137,26 @@ async function main() {
     console.log(`  - ${user.username} (${user.email})`);
   });
 
+  // Create configuration (if it doesn't exist)
+  console.log('⚙️ Creating configuration...');
+  const existingConfig = await prisma.configuration.findFirst();
+  if (!existingConfig) {
+    await prisma.configuration.create({
+      data: {
+        twoFactorEnabled: false,
+        appName: 'Application'
+      }
+    });
+    console.log('✅ Configuration created with 2FA disabled');
+  } else {
+    console.log('✅ Configuration already exists');
+  }
+
   console.log('🎉 Database seeding completed successfully!');
   console.log('\n📋 Summary:');
   console.log('  - 5 roles created');
   console.log('  - 6 users created');
+  console.log('  - Configuration initialized');
   console.log('  - All users have password: "asdf"');
   console.log('  - Super admin has all roles');
 }

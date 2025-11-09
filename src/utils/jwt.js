@@ -42,8 +42,27 @@ const extractTokenFromHeader = (authHeader) => {
   return authHeader.substring(7); // Remove 'Bearer ' prefix
 };
 
+// Generate temporary token for 2FA verification (short expiration)
+const generateTempToken = (user) => {
+  const payload = {
+    userId: user.id.toString(),
+    username: user.username,
+    email: user.email,
+    name: user.name,
+    lastName: user.lastName,
+    roles: user.roles || [],
+    isTempToken: true, // Flag to indicate this is a temporary token
+    iat: Math.floor(Date.now() / 1000),
+  };
+
+  return jwt.sign(payload, JWT_SECRET, {
+    expiresIn: '10m', // 10 minutes expiration for 2FA verification
+  });
+};
+
 module.exports = {
   generateToken,
+  generateTempToken,
   verifyToken,
   extractTokenFromHeader
 };

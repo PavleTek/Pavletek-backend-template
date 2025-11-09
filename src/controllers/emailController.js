@@ -315,6 +315,20 @@ const deleteEmail = async (req, res) => {
       where: { id: emailId },
     });
 
+    // Check if any email senders remain
+    const remainingEmailSenders = await prisma.emailSender.count();
+
+    // If no email senders remain and 2FA is enabled, auto-disable it
+    if (remainingEmailSenders === 0) {
+      const config = await prisma.configuration.findFirst();
+      if (config && config.twoFactorEnabled) {
+        await prisma.configuration.update({
+          where: { id: config.id },
+          data: { twoFactorEnabled: false }
+        });
+      }
+    }
+
     res.status(200).json({
       message: 'Email sender deleted successfully',
     });

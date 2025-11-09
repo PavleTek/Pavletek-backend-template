@@ -12,6 +12,7 @@ const {
   updateRole,
   deleteRole
 } = require('../controllers/adminController');
+const { getConfig, updateConfig } = require('../controllers/configController');
 const { authenticateToken, authenticateRoles } = require('../middleware/authentication');
 
 const router = express.Router();
@@ -34,6 +35,10 @@ router.get('/roles', getAllRoles);
 router.post('/roles', createRole);
 router.put('/roles/:id', updateRole);
 router.delete('/roles/:id', deleteRole);
+
+// Configuration routes
+router.get('/config', getConfig);
+router.put('/config', updateConfig);
 
 module.exports = router;
 
