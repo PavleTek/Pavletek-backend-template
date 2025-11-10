@@ -63,5 +63,9 @@ setInterval(() => {
   console.log("💓 Heartbeat - server still alive", new Date().toISOString());
 }, 5000);
 
+process.on("SIGTERM", () => {
+  console.warn("⚠️ Received SIGTERM - Railway orchestrator stopping this container.");
+});
+
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, "0.0.0.0", () => console.log(`Server running on ${PORT}`));
