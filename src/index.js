@@ -1,48 +1,44 @@
-const express = require("express");
-const prisma = require("./lib/prisma");
-const dotenv = require("dotenv");
-const cors = require("cors");
-const authRouter = require("./routers/authRouter");
-const adminRouter = require("./routers/adminRouter");
-const emailRouter = require("./routers/emailRouter");
+const express = require('express')
+const cors = require('cors')
+const dotenv = require('dotenv')
+dotenv.config()
 
-dotenv.config();
+const app = express()
 
-const app = express();
-const PORT = process.env.PORT || 3001;
-
+// CORS FIRST
 const allowedOrigins = process.env.CORS_ORIGIN
   ? process.env.CORS_ORIGIN.split(',').map((o) => o.trim())
   : true
 
 const corsOptions = {
   origin: function (origin, callback) {
-    console.log('Request origin:', origin)
-    console.log('Allowed origins:', allowedOrigins)
-
-    // Allow requests with no origin (like mobile apps, curl, etc.)
+    // Allow requests with no Origin (curl, mobile apps)
     if (!origin) return callback(null, true)
 
-    if (allowedOrigins === true || allowedOrigins.includes(origin)) {
+    // Normalize trailing slashes
+    const cleanOrigin = origin.replace(/\/$/, '')
+    const allowed = Array.isArray(allowedOrigins)
+      ? allowedOrigins.map((o) => o.replace(/\/$/, ''))
+      : allowedOrigins
+
+    if (allowed === true || allowed.includes(cleanOrigin)) {
       callback(null, true)
     } else {
-      callback(new Error(`CORS blocked for origin: ${origin}`))
+      console.log('Blocked CORS request from:', origin)
+      callback(new Error('Not allowed by CORS'))
     }
   },
   credentials: true,
   optionsSuccessStatus: 200
 }
 
-app.use(cors(corsOptions));
-app.use(express.json());
+app.use(cors(corsOptions))
+app.use(express.json())
 
-// Routes
-app.use("/api/auth", authRouter);
-app.use("/api/admin", adminRouter);
-app.use("/api/admin", emailRouter);
+// ROUTES COME *AFTER* CORS
+app.use('/api/auth', require('./routers/authRouter'))
+app.use('/api/admin', require('./routers/adminRouter'))
+app.use('/api/admin', require('./routers/emailRouter'))
 
-app.listen(PORT, () => {
-  console.log(PORT);
-  console.log(process.env.DATABASE_URL);
-  console.log(`Server running on http://localhost:${PORT}`);
-});
+const PORT = process.env.PORT || 3001
+app.listen(PORT, () => console.log(`Server running on port ${PORT}`))
