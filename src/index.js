@@ -11,13 +11,24 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-// Allow comma-separated origins in .env, fallback to true for dev
 const allowedOrigins = process.env.CORS_ORIGIN
   ? process.env.CORS_ORIGIN.split(',').map((o) => o.trim())
   : true
 
 const corsOptions = {
-  origin: allowedOrigins,
+  origin: function (origin, callback) {
+    console.log('Request origin:', origin)
+    console.log('Allowed origins:', allowedOrigins)
+
+    // Allow requests with no origin (like mobile apps, curl, etc.)
+    if (!origin) return callback(null, true)
+
+    if (allowedOrigins === true || allowedOrigins.includes(origin)) {
+      callback(null, true)
+    } else {
+      callback(new Error(`CORS blocked for origin: ${origin}`))
+    }
+  },
   credentials: true,
   optionsSuccessStatus: 200
 }
