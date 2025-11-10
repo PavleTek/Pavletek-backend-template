@@ -30,6 +30,10 @@ app.use((req, res, next) => {
   next()
 })
 
+app.get("/", (req, res) => {
+  res.send("OK");
+});
+
 // Routers after CORS
 app.use("/api/auth", authRouter)
 app.use("/api/admin", adminRouter)
