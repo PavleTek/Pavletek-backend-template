@@ -11,11 +11,16 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 3001;
 
+// Allow comma-separated origins in .env, fallback to true for dev
+const allowedOrigins = process.env.CORS_ORIGIN
+  ? process.env.CORS_ORIGIN.split(',').map((o) => o.trim())
+  : true
+
 const corsOptions = {
-  origin: process.env.CORS_ORIGIN || (process.env.NODE_ENV === 'production' ? false : true), // Allow all origins in dev, specific in prod
+  origin: allowedOrigins,
   credentials: true,
-  optionsSuccessStatus: 200,
-};
+  optionsSuccessStatus: 200
+}
 
 app.use(cors(corsOptions));
 app.use(express.json());
