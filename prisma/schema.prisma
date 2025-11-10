@@ -15,7 +15,7 @@ model User {
   name                        String?
   lastName                    String?
   chileanRutNumber            String?
-  color                       String    @default("#3285a8")
+  color                       String    @default("#7ad9c5")
   createdAt                   DateTime  @default(now())
   createdBy                   Int       @default(0)
   lastLogin                   DateTime?
@@ -23,7 +23,7 @@ model User {
   twoFactorEnabled            Boolean   @default(false)
   twoFactorBackupCodes        String[]  @default([])
   twoFactorRecoveryCode       String?
-  twoFactorRecoveryCodeExpires DateTime?
+  twoFactorRecoveryCodeExpiresDateTime?
   passwordResetCode           String?
   passwordResetCodeExpires     DateTime?
   userRoles                   UserRole[]
@@ -63,7 +63,7 @@ model EmailSender {
 model Configuration {
   id                    Int       @id @default(autoincrement())
   twoFactorEnabled      Boolean   @default(false)
-  appName               String    @default("Application")
+  appName               String    @default("PavleTek")
   recoveryEmailSenderId  Int?
   updatedAt             DateTime  @updatedAt
 }
