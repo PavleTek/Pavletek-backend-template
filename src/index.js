@@ -9,6 +9,15 @@ const emailRouter = require("./routers/emailRouter")
 dotenv.config()
 const app = express()
 
+// very top of index.js
+const fs = require("fs");
+
+function logToFile(msg) {
+  fs.appendFileSync("/tmp/app.log", `[${new Date().toISOString()}] ${msg}\n`);
+  console.log(msg);
+}
+
+
 process.on("uncaughtException", (err) => {
   console.error("❌ Uncaught Exception:", err);
 });
@@ -55,7 +64,7 @@ app.get("/", (req, res) => {
   res.end("OK");
 });
 // Routers after CORS
-app.use("/api/auth", authRouter)
+app.use("/api/auth",console.log('auth is being tried on'), authRouter)
 app.use("/api/admin", adminRouter)
 app.use("/api/admin", emailRouter)
 
