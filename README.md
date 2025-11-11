@@ -14,7 +14,7 @@ cp .env.example .env
 # Edit .env with your database URL and JWT secret
 ```
 
-3. Set up the database:
+3. Set up the database (must have a propper databaseURL in order for prisma to connect to it):
 ```bash
 npx prisma generate
 npx prisma db push
@@ -23,7 +23,7 @@ npx prisma db seed
 
 4. Start the development server:
 ```bash
-npm run dev
+node src/index.js
 ```
 
 ## Environment Variables
