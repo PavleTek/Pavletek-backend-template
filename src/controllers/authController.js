@@ -1,7 +1,7 @@
 const prisma = require('../lib/prisma');
 const { comparePassword, hashPassword } = require('../utils/password');
 const { generateToken, generateTempToken, verifyToken } = require('../utils/jwt');
-const { generateSecret, generateQRCode, verifyToken: verifyTwoFactorToken, generateBackupCodes, hashBackupCode, generateRecoveryCode, hashRecoveryCode, verifyRecoveryCode: verifyRecoveryCodeUtil } = require('../utils/twoFactor');
+const { generateSecret, generateQRCode, verifyToken: verifyTwoFactorToken, generateRecoveryCode, hashRecoveryCode, verifyRecoveryCode: verifyRecoveryCodeUtil } = require('../utils/twoFactor');
 const { sendEmail } = require('../services/emailService');
 
 // Login user
@@ -80,12 +80,13 @@ const login = async (req, res) => {
     const config = await prisma.configuration.findFirst();
     const system2FAEnabled = config?.twoFactorEnabled || false;
 
-    // If system 2FA is enabled
-    if (system2FAEnabled) {
+    // Determine if 2FA is required for this user
+    // System 2FA overrides user preference - if system 2FA is enabled, all users must use 2FA
+    // If system 2FA is disabled, check if user has enabled 2FA for themselves
+    const requires2FA = system2FAEnabled || user.userEnabledTwoFactor;
+
+    if (requires2FA) {
       // Check if user has 2FA set up
-      // NOTE: User 2FA settings are preserved even when system 2FA is disabled/re-enabled
-      // Users who already have 2FA configured will only need to verify (enter code)
-      // Users without 2FA will need to set it up
       const userHas2FA = user.twoFactorSecret && user.twoFactorEnabled;
 
       if (userHas2FA) {
@@ -111,8 +112,7 @@ const login = async (req, res) => {
       }
     }
 
-    // System 2FA is disabled - normal login (users can login regardless of their 2FA status)
-    // User 2FA settings remain intact in the database
+    // 2FA is not required - normal login
     const token = generateToken(userWithoutPassword);
 
     res.status(200).json({
@@ -475,25 +475,19 @@ const verifyTwoFactorSetupMandatory = async (req, res) => {
       return;
     }
 
-    // Generate backup codes
-    const backupCodes = generateBackupCodes(10);
-    const hashedBackupCodes = backupCodes.map(code => hashBackupCode(code));
+    // Update lastLogin timestamp
+    const now = new Date();
 
     // Save secret and enable 2FA for user
+    // Set userEnabledTwoFactor = true to indicate user has enabled 2FA for themselves
     await prisma.user.update({
       where: { id: userId },
       data: {
         twoFactorSecret: secret,
         twoFactorEnabled: true,
-        twoFactorBackupCodes: hashedBackupCodes
+        userEnabledTwoFactor: true,
+        lastLogin: now
       }
-    });
-
-    // Update lastLogin timestamp
-    const now = new Date();
-    await prisma.user.update({
-      where: { id: userId },
-      data: { lastLogin: now }
     });
 
     // Prepare user data without password
@@ -516,7 +510,6 @@ const verifyTwoFactorSetupMandatory = async (req, res) => {
 
     res.status(200).json({
       message: '2FA enabled successfully',
-      backupCodes: backupCodes,
       token: token,
       user: userWithoutPassword
     });
@@ -591,23 +584,19 @@ const verifyTwoFactorSetup = async (req, res) => {
       return;
     }
 
-    // Generate backup codes
-    const backupCodes = generateBackupCodes(10);
-    const hashedBackupCodes = backupCodes.map(code => hashBackupCode(code));
-
     // Save secret and enable 2FA for user
+    // Set userEnabledTwoFactor = true to indicate user has enabled 2FA for themselves
     await prisma.user.update({
       where: { id: userId },
       data: {
         twoFactorSecret: secret,
         twoFactorEnabled: true,
-        twoFactorBackupCodes: hashedBackupCodes
+        userEnabledTwoFactor: true
       }
     });
 
     res.status(200).json({
-      message: '2FA enabled successfully',
-      backupCodes: backupCodes // Return plain codes only once
+      message: '2FA enabled successfully'
     });
   } catch (error) {
     console.error('Verify 2FA setup error:', error);
@@ -621,12 +610,24 @@ const disableTwoFactor = async (req, res) => {
     const currentUser = req.user;
     const userId = currentUser.id;
 
+    // Check if system 2FA is enabled - users cannot disable 2FA when system requires it
+    const config = await prisma.configuration.findFirst();
+    const system2FAEnabled = config?.twoFactorEnabled || false;
+
+    if (system2FAEnabled) {
+      res.status(400).json({ 
+        error: 'Cannot disable 2FA. System-wide 2FA is enabled and required for all users.' 
+      });
+      return;
+    }
+
+    // Clear 2FA data and set userEnabledTwoFactor = false
     await prisma.user.update({
       where: { id: userId },
       data: {
         twoFactorSecret: null,
         twoFactorEnabled: false,
-        twoFactorBackupCodes: []
+        userEnabledTwoFactor: false
       }
     });
 
@@ -649,7 +650,8 @@ const getTwoFactorStatus = async (req, res) => {
       where: { id: userId },
       select: {
         twoFactorEnabled: true,
-        twoFactorSecret: true
+        twoFactorSecret: true,
+        userEnabledTwoFactor: true
       }
     });
 
@@ -665,6 +667,7 @@ const getTwoFactorStatus = async (req, res) => {
     res.status(200).json({
       message: '2FA status retrieved successfully',
       enabled: user.twoFactorEnabled && !!user.twoFactorSecret,
+      userEnabled: user.userEnabledTwoFactor,
       systemEnabled: system2FAEnabled
     });
   } catch (error) {
@@ -866,12 +869,13 @@ const verifyRecoveryCode = async (req, res) => {
     }
 
     // Disable 2FA for user and clear recovery code
+    // Set userEnabledTwoFactor = false since 2FA is being disabled
     await prisma.user.update({
       where: { id: userId },
       data: {
         twoFactorSecret: null,
         twoFactorEnabled: false,
-        twoFactorBackupCodes: [],
+        userEnabledTwoFactor: false,
         twoFactorRecoveryCode: null,
         twoFactorRecoveryCodeExpires: null
       }

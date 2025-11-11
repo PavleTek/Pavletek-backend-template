@@ -21,7 +21,7 @@ model User {
   lastLogin                     DateTime?
   twoFactorSecret               String?
   twoFactorEnabled              Boolean   @default(false)
-  twoFactorBackupCodes          String[]  @default([])
+  userEnabledTwoFactor          Boolean   @default(false)
   twoFactorRecoveryCode         String?
   twoFactorRecoveryCodeExpires  DateTime?
   passwordResetCode             String?

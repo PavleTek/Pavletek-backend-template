@@ -60,41 +60,6 @@ function verifyToken(secret, token, window = 2) {
 }
 
 /**
- * Generate backup codes for 2FA recovery
- * @param {number} count - Number of codes to generate (default: 10)
- * @returns {string[]} Array of backup codes
- */
-function generateBackupCodes(count = 10) {
-  const codes = [];
-  for (let i = 0; i < count; i++) {
-    // Generate 8-character alphanumeric codes
-    const code = crypto.randomBytes(4).toString('hex').toUpperCase();
-    codes.push(code);
-  }
-  return codes;
-}
-
-/**
- * Hash a backup code for storage
- * @param {string} code - Plain backup code
- * @returns {string} Hashed code
- */
-function hashBackupCode(code) {
-  return crypto.createHash('sha256').update(code).digest('hex');
-}
-
-/**
- * Verify a backup code against hashed codes
- * @param {string} code - Plain backup code to verify
- * @param {string[]} hashedCodes - Array of hashed backup codes
- * @returns {boolean} True if code matches
- */
-function verifyBackupCode(code, hashedCodes) {
-  const hashedCode = hashBackupCode(code);
-  return hashedCodes.includes(hashedCode);
-}
-
-/**
  * Generate a 6-digit recovery code for 2FA reset
  * @returns {string} 6-digit numeric code
  */
@@ -127,9 +92,6 @@ module.exports = {
   generateSecret,
   generateQRCode,
   verifyToken,
-  generateBackupCodes,
-  hashBackupCode,
-  verifyBackupCode,
   generateRecoveryCode,
   hashRecoveryCode,
   verifyRecoveryCode

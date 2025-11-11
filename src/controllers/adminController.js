@@ -425,7 +425,7 @@ const forceResetUser2FA = async (req, res) => {
       data: {
         twoFactorSecret: null,
         twoFactorEnabled: false,
-        twoFactorBackupCodes: [],
+        userEnabledTwoFactor: false,
         twoFactorRecoveryCode: null,
         twoFactorRecoveryCodeExpires: null
       }
