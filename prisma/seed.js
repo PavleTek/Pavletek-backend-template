@@ -150,27 +150,6 @@ async function main() {
     console.log(`ℹ️  Users already initialized`);
   }
 
-  // Create configuration (if it doesn't exist)
-  console.log('⚙️ Creating configuration...');
-  const existingConfig = await prisma.configuration.findFirst();
-  if (!existingConfig) {
-    // Get first email sender if any exist for default recovery email
-    const firstEmailSender = await prisma.emailSender.findFirst({
-      orderBy: { createdAt: 'asc' }
-    });
-
-    await prisma.configuration.create({
-      data: {
-        twoFactorEnabled: false,
-        appName: 'Application',
-        recoveryEmailSenderId: firstEmailSender?.id || null
-      }
-    });
-    console.log('  ✅ Configuration created with 2FA disabled');
-  } else {
-    console.log('  ⚠️  Configuration already exists, skipping creation');
-  }
-
   console.log('🎉 Database seeding completed successfully!');
   console.log('\n📋 Summary:');
   if (createdRoles.length > 0) {
